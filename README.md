@@ -27,9 +27,10 @@
       * select the `data.mochi` file
   * repeat for each deck 
 
-## limitation
+## Limitations
 * Decks must be exported and imported one by one
-  * Mochi(at the time of this tools creation) doesn’t supports deck collection exports
+  * Mochi(at the time of this tool's creation) doesn’t supports deck collection
+    exports or imports
   * Anki does support deck collection exports, but because of Mochi’s limitation, you will need to export one by one. 
 * Conversion
   * Due to the limitations of the converter gem I'm using not all html is converted into markdown. Most **should** get converted, the lingering HTML is stripped out.
