@@ -40,7 +40,7 @@ def delete_and_create_directory(dir_path)
 end
 
 
-def create_mochi_deck_info(file_name, new_file_path, index_counter)
+def create_mochi_file(file_name, new_file_path, index_counter)
   anki_deck  = JSON.parse(File.read("anki/#{file_name}"))
 
   deck_name  = EDN.symbol("New Deck#{index_counter}").to_s
@@ -88,7 +88,7 @@ def start_app
     new_file_path = new_dir_path + '/data.edn'
 
     delete_and_create_directory(new_dir_path)
-    create_mochi_deck_info(file_name, new_file_path, index_counter)
+    create_mochi_file(file_name, new_file_path, index_counter)
     replace_content_separator!(new_file_path)
     create_and_clean_zip(new_dir_path, new_file_path)
   end
