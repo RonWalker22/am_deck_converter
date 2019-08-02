@@ -7,91 +7,162 @@ require 'fileutils'
 require 'action_view'
 require 'zip'
 
-def create_zip(dir_path, file_path)
-  Zip::File.open("#{dir_path}", Zip::File::CREATE) {
-    |zipfile|
-     zipfile.get_output_stream("data.edn") do |f| 
-       f.puts File.read("#{file_path}")
-     end
-   }
+class MochiCard
+  attr_accessor :name, :id, :sort, :deck_id, :content, :new, :reviews
+
+  def initialize(details = {})
+    @name    = details[:name]    || 'Mochi Card'
+    @content = details[:content] || ''
+    @id      = details[:id]      || SecureRandom.uuid
+    @new     = details[:new]     || false
+    @sort    = details[:sort]    || 1
+    @reviews = details[:reviews] || []
+    @deck_id = details[:deck_id] || nil
+  end
+
+  def to_edn
+    {
+      content: convert_to_markdown(content),
+      name: convert_to_markdown(name),
+      reviews: reviews,
+      id: EDN.symbol(':' + id),
+      sort: EDN.symbol(sort.to_s),
+      new?: new,
+      deck_id: deck_id
+    }.to_edn
+  end
+
+  def convert_to_markdown(html)
+    html = ReverseMarkdown.convert(html, github_flavored: true)
+    ActionView::Base.full_sanitizer.sanitize(html) 
+  end
 end
 
-def delete_file(file)
-  FileUtils.rm_rf(file)
-end
+# WIP
+# class AnkiCard
+# end
 
-def replace_content_separator!(new_file_path)
-  contents = File.read(new_file_path)
-  contents.gsub!(/newline---newline/, "\\n---\\n")
-  File.write(new_file_path, contents)
-end
+# WIP
+# class AnkiDeck
+#   attr_accessor :name, :id, :contents
+#   def initialize
+#     @name = options[:name] ||
+#     @id = nil
+#     @cards = []
+#   end
+# end
 
-def delete_exsiting_directory(dir_path)
-  FileUtils.rm_rf(dir_path) if File.directory?(dir_path) 
-end
+class MochiDeck
+  attr_accessor :name, :id, :cards, :version
 
-def create_directory(dir_path)
-  FileUtils.mkdir dir_path
-end
+  def initialize(details = {})
+    @name     = details[:name]     || 'New Deck'
+    @id       = details[:id]       || SecureRandom.uuid
+    @cards    = details[:cards]    || []
+    @version  = details[:version]  || 1
+  end
 
-def delete_and_create_directory(dir_path)
-  delete_exsiting_directory(dir_path)
-  create_directory(dir_path)
-end
+  def to_edn
+    self.instance_variables.each {|var| var.to_edn}
+  end
 
+  def create_file(anki_file_path, mochi_file_path)
+    anki_deck  = JSON.parse(File.read(anki_file_path))
+    anki_deck = anki_deck["notes"]
+    anki_deck.each_with_index do |card, index|
+      question = card["fields"][0]
+      answer = card["fields"][1]
+      @cards << MochiCard.new(
+                name: card["fields"][0],
+                content: "#{question} #{'<div></div>---<div></div>'} #{answer}",
+                sort: EDN.symbol((@cards.size).to_s),
+                deck_id: id
+      )
+      @cards << EDN.symbol(",") unless index + 1 == anki_deck.size
+    end
 
-def create_mochi_file(file_name, new_file_path, index_counter)
-  anki_deck  = JSON.parse(File.read("anki/#{file_name}"))
+    File.write(mochi_file_path, self.to_edn)
+  end
 
-  deck_name  = EDN.symbol("New Deck#{index_counter}").to_s
-  deck_id    = EDN.symbol(':' + SecureRandom.uuid)
-  mochi_deck = {name: deck_name, 
-                id: deck_id, 
-                cards: [], 
-                version: EDN.symbol((1).to_s)}
+  def to_edn
+    {
+      name: EDN.symbol(name).to_s,
+      id: EDN.symbol(':' + id),
+      cards: EDN.symbol(cards.to_edn),
+      version: EDN.symbol(version.to_s)
+    }.to_edn
+  end
 
-  anki_deck.each_with_index do |card, index|
-    card_id      = SecureRandom.uuid
+  def delete_exsiting_directory(dir_path)
+    FileUtils.rm_rf(dir_path) if File.directory?(dir_path) 
+  end
 
-    card_title = ReverseMarkdown.convert(card["sfld"], github_flavored: true)
-    card_title = ActionView::Base.full_sanitizer.sanitize(card_title)
+  def create_directory(dir_path)
+    FileUtils.mkdir dir_path
+  end
 
-    card_content = card["flds"].gsub!(/\u001f/i, "newline---newline")
-    card_content = ReverseMarkdown.convert(card_content, github_flavored: true)
-    card_content = ActionView::Base.full_sanitizer.sanitize(card_content)
+  def delete_and_create_directory(dir_path)
+    delete_exsiting_directory(dir_path)
+    create_directory(dir_path)
+  end
 
-    mochi_deck[:cards] << { content: card_content,
-                            name: card_title,
-                            reviews: [],
-                            new?: false,
-                            sort: EDN.symbol((index + 1).to_s),
-                            'deck-id': deck_id,
-                            id: EDN.symbol(':' + card_id)
+  def create_and_clean_zip(new_dir_path, new_file_path)
+    create_zip("#{new_dir_path}/data.mochi", new_file_path)
+    delete_file(new_file_path)
+  end
+
+  def create_zip(dir_path, file_path)
+    Zip::File.open("#{dir_path}", Zip::File::CREATE) {
+      |zipfile|
+      zipfile.get_output_stream("data.edn") do |f| 
+        f.puts File.read("#{file_path}")
+      end
     }
-    mochi_deck[:cards] << EDN.symbol(",") unless index + 1 == anki_deck.size
   end
-  File.write(new_file_path, mochi_deck.to_edn)
-end
 
-def create_and_clean_zip(new_dir_path, new_file_path)
-  create_zip("#{new_dir_path}/data.mochi", new_file_path)
-  delete_file(new_file_path)
-end
-
-def start_app
-  index_counter = 0
-
-  Dir.foreach('anki') do |file_name|
-    next unless File.extname(file_name) == ".json"
-    index_counter += 1
-    new_dir_path  = "mochi/new-deck-#{index_counter}"
-    new_file_path = new_dir_path + '/data.edn'
-
-    delete_and_create_directory(new_dir_path)
-    create_mochi_file(file_name, new_file_path, index_counter)
-    replace_content_separator!(new_file_path)
-    create_and_clean_zip(new_dir_path, new_file_path)
+  def delete_file(file)
+    FileUtils.rm_rf(file)
   end
 end
 
-start_app
+class AmConverter
+  attr_accessor :anki_location, :mochi_location
+
+  def initialize(details = {})
+    @anki_location = details[:anki_location] || "anki_decks"
+    @mochi_location = details[:mochi_location] || "mochi_decks"
+  end
+
+  def convert(deck_name = 'Anki')
+    if deck_name == 'Anki'
+      convert_anki_deck
+    elsif deck_name == 'Mochi'
+      # converts mochi_deck(deck)
+      # @location = "mochi"
+    end
+  end
+
+  def convert_anki_deck
+    Dir.foreach(@anki_location) do |file_name|
+      next unless File.extname(file_name) == ".json"
+
+      file_base_name  = File.basename(file_name, File.extname(file_name))
+      mochi_deck      = MochiDeck.new(name: file_base_name)
+      mochi_dir_path  = "#{@mochi_location}/#{file_name}"
+      mochi_file_path = "#{mochi_dir_path}/data.edn"
+      anki_file_path  = "#{@anki_location}/#{file_name}"
+
+      mochi_deck.delete_and_create_directory(mochi_dir_path)
+      mochi_deck.create_file(anki_file_path, mochi_file_path)
+      mochi_deck.create_and_clean_zip(mochi_dir_path, mochi_file_path)
+    end
+  end
+
+  # WIP
+  # def convert_mochi_deck 
+  # end
+end
+
+am_converter = AmConverter.new
+
+am_converter.convert('Anki')
