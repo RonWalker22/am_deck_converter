@@ -36,6 +36,7 @@ GEM
     thread_safe (0.3.6)
     tzinfo (1.2.5)
       thread_safe (~> 0.1)
+    zip (2.0.2)
 
 PLATFORMS
   ruby
@@ -44,9 +45,10 @@ DEPENDENCIES
   actionview (~> 5.2)
   edn
   reverse_markdown
+  zip
 
 RUBY VERSION
    ruby 2.6.2p47
 
 BUNDLED WITH
-   1.17.2
+   1.17.3
